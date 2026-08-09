@@ -9,4 +9,4 @@ wheels/
 # Virtual environments
 .venv
 
-src/football_analytics/data/raw/
+src/data/raw/
