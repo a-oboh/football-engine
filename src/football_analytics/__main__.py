@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from .ingestion.pipeline import ingest
+from football_analytics.ingestion.pipeline import ingest
 
 
 DATA_PATH = (
