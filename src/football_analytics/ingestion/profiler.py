@@ -1,4 +1,4 @@
-from pandas import pd
+import pandas as pd
 
 
 def profile(df: pd.DataFrame) -> None:
