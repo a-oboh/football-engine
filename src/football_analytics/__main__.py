@@ -4,7 +4,12 @@ from football_analytics.ingestion.pipeline import ingest
 
 
 DATA_PATH = (
-    Path(__file__).resolve().parents[2] / "data" / "raw" / "epl" / "epl_2025_26.csv"
+    Path(__file__).resolve().parents[2]
+    / "src"
+    / "data"
+    / "raw"
+    / "epl"
+    / "epl_2025_26.csv"
 )
 
 
