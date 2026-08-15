@@ -9,6 +9,8 @@ authors = [
 requires-python = ">=3.14"
 dependencies = [
     "pandas>=3.0.5",
+    "psycopg>=3.3.4",
+    "sqlalchemy>=2.0.52",
 ]
 
 [project.scripts]
@@ -30,5 +32,6 @@ quote-style = "double"
 
 [dependency-groups]
 dev = [
+    "alembic>=1.19.1",
     "ruff>=0.16.2",
 ]
