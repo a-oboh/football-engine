@@ -34,5 +34,6 @@ quote-style = "double"
 [dependency-groups]
 dev = [
     "alembic>=1.19.1",
+    "pytest>=9.1.1",
     "ruff>=0.16.2",
 ]
