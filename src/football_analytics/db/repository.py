@@ -19,3 +19,5 @@ class FootballRepository:
             self.session.flush()
 
         return season
+
+    def 
