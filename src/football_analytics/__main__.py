@@ -14,11 +14,7 @@ DATA_PATH = (
 
 
 def main() -> None:
-    df = ingest(DATA_PATH)
-
-    print(df.head())
-    print(df.shape)
-    print(df.columns.tolist())
+    ingest(Path("src/data/raw/epl/epl_2025_26.csv"))
 
 
 if __name__ == "__main__":
