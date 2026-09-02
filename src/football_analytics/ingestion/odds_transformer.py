@@ -20,8 +20,15 @@ OVER_UNDER_SOURCES = {
     "P": "Pinnacle",
 }
 
+ASIAN_HANDICAP_SOURCES = {
+    "B365": "Bet365",
+    "P": "Pinnacle",
+    "GB": "Gamebookers",
+    "LB": "Ladbrokes",
+}
 
-def transform_odds(
+
+def _transform_market_odds(
     row: pd.Series,
     column_mapping: dict[str, tuple[str, str]],
     market: str,
@@ -52,6 +59,7 @@ def transform_odds(
 
     return odds
 
+
 def transform_1x2_odds(row: pd.Series) -> list[dict[str, Any]]:
     mapping = {}
 
@@ -64,7 +72,7 @@ def transform_1x2_odds(row: pd.Series) -> list[dict[str, Any]]:
             }
         )
 
-    odds = transform_odds(
+    odds = _transform_market_odds(
         row,
         mapping,
         market="1X2",
@@ -83,7 +91,7 @@ def transform_1x2_odds(row: pd.Series) -> list[dict[str, Any]]:
         )
 
     odds.extend(
-        transform_odds(
+        _transform_market_odds(
             row,
             closing_mapping,
             market="1X2",
@@ -92,6 +100,7 @@ def transform_1x2_odds(row: pd.Series) -> list[dict[str, Any]]:
     )
 
     return odds
+
 
 def transform_over_under_odds(row: pd.Series) -> list[dict[str, Any]]:
     mapping = {}
@@ -109,10 +118,54 @@ def transform_over_under_odds(row: pd.Series) -> list[dict[str, Any]]:
         }
     )
 
-    return transform_odds(
+    return _transform_market_odds(
         row,
         mapping,
         market="OVER_UNDER",
         phase="PRE_CLOSING",
         line=2.5,
     )
+
+
+def transform_asian_handicap_odds(
+    row: pd.Series,
+) -> list[dict[str, Any]]:
+    odds = []
+
+    for code, bookmaker in ASIAN_HANDICAP_SOURCES.items():
+        handicap_column = f"{code}AH"
+
+        if handicap_column not in row.index:
+            continue
+
+        handicap = row[handicap_column]
+
+        if pd.isna(handicap):
+            continue
+
+        mapping = {
+            f"{code}AHH": (bookmaker, "HOME"),
+            f"{code}AHA": (bookmaker, "AWAY"),
+        }
+
+        odds.extend(
+            _transform_market_odds(
+                row,
+                mapping,
+                market="ASIAN_HANDICAP",
+                phase="PRE_CLOSING",
+                line=float(handicap),
+            )
+        )
+
+    return odds
+
+
+def transform_odds(row: pd.Series) -> list[dict[str, Any]]:
+    odds = []
+
+    odds.extend(transform_1x2_odds(row))
+    odds.extend(transform_over_under_odds(row))
+    odds.extend(transform_asian_handicap_odds(row))
+
+    return odds
