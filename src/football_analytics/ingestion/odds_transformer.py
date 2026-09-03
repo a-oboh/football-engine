@@ -118,7 +118,7 @@ def transform_over_under_odds(row: pd.Series) -> list[dict[str, Any]]:
         }
     )
 
-    return _transform_market_odds(
+    odds = _transform_market_odds(
         row,
         mapping,
         market="OVER_UNDER",
@@ -126,27 +126,56 @@ def transform_over_under_odds(row: pd.Series) -> list[dict[str, Any]]:
         line=2.5,
     )
 
+    closing_mapping = {}
+
+    for code, bookmaker in OVER_UNDER_SOURCES.items():
+        closing_mapping[f"{code}C>2.5"] = (bookmaker, "OVER")
+        closing_mapping[f"{code}C<2.5"] = (bookmaker, "UNDER")
+
+    closing_mapping.update(
+        {
+            "MaxC>2.5": ("Market Max", "OVER"),
+            "MaxC<2.5": ("Market Max", "UNDER"),
+            "AvgC>2.5": ("Market Average", "OVER"),
+            "AvgC<2.5": ("Market Average", "UNDER"),
+        }
+    )
+
+    odds.extend(
+        _transform_market_odds(
+            row,
+            closing_mapping,
+            market="OVER_UNDER",
+            phase="CLOSING",
+            line=2.5,
+        )
+    )
+
+    return odds
+
 
 def transform_asian_handicap_odds(
     row: pd.Series,
 ) -> list[dict[str, Any]]:
     odds = []
 
-    for code, bookmaker in ASIAN_HANDICAP_SOURCES.items():
-        handicap_column = f"{code}AH"
+    handicap = row.get("AHh")
 
-        if handicap_column not in row.index:
-            continue
+    if pd.notna(handicap):
+        mapping = {}
 
-        handicap = row[handicap_column]
+        for code, bookmaker in ASIAN_HANDICAP_SOURCES.items():
+            mapping[f"{code}AHH"] = (bookmaker, "HOME")
+            mapping[f"{code}AHA"] = (bookmaker, "AWAY")
 
-        if pd.isna(handicap):
-            continue
-
-        mapping = {
-            f"{code}AHH": (bookmaker, "HOME"),
-            f"{code}AHA": (bookmaker, "AWAY"),
-        }
+        mapping.update(
+            {
+                "MaxAHH": ("Market Max", "HOME"),
+                "MaxAHA": ("Market Max", "AWAY"),
+                "AvgAHH": ("Market Average", "HOME"),
+                "AvgAHA": ("Market Average", "AWAY"),
+            }
+        )
 
         odds.extend(
             _transform_market_odds(
@@ -155,6 +184,34 @@ def transform_asian_handicap_odds(
                 market="ASIAN_HANDICAP",
                 phase="PRE_CLOSING",
                 line=float(handicap),
+            )
+        )
+
+    closing_handicap = row.get("AHCh")
+
+    if pd.notna(closing_handicap):
+        closing_mapping = {}
+
+        for code, bookmaker in ASIAN_HANDICAP_SOURCES.items():
+            closing_mapping[f"{code}CAHH"] = (bookmaker, "HOME")
+            closing_mapping[f"{code}CAHA"] = (bookmaker, "AWAY")
+
+        closing_mapping.update(
+            {
+                "MaxCAHH": ("Market Max", "HOME"),
+                "MaxCAHA": ("Market Max", "AWAY"),
+                "AvgCAHH": ("Market Average", "HOME"),
+                "AvgCAHA": ("Market Average", "AWAY"),
+            }
+        )
+
+        odds.extend(
+            _transform_market_odds(
+                row,
+                closing_mapping,
+                market="ASIAN_HANDICAP",
+                phase="CLOSING",
+                line=float(closing_handicap),
             )
         )
 
