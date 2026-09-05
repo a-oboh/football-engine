@@ -1,3 +1,4 @@
+from football_analytics.ingestion.odds_transformer import transform_odds
 from football_analytics.db.repository import FootballRepository
 from football_analytics.db.session import SessionLocal
 from pathlib import Path
@@ -30,6 +31,7 @@ def ingest(path: Path):
     matches = [transform_match(row) for _, row in df.iterrows()]
 
     statistics = [transform_match_statistics(row) for _, row in df.iterrows()]
+    odds = [transform_odds(row) for _, row in df.iterrows()]
 
     with SessionLocal() as session:
         repository = FootballRepository(session)
@@ -45,7 +47,7 @@ def ingest(path: Path):
             }
 
             # Matches + statistics
-            for match_data, stats_data in zip(matches, statistics):
+            for match_data, stats_data, match_odds in zip(matches, statistics, odds):
                 home_team = teams[match_data["home_team_name"]]
                 away_team = teams[match_data["away_team_name"]]
 
