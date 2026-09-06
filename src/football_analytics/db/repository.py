@@ -1,8 +1,9 @@
+from decimal import Decimal
 from tracemalloc import Statistic
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 
-from .models import Season, Team, Referee, Match, MatchStatistics
+from .models import Season, Team, Referee, Match, MatchStatistics, Bookmaker, Odds
 
 
 class FootballRepository:
@@ -40,7 +41,6 @@ class FootballRepository:
             self.session.flush()
 
         return referee
-
 
     def create_match(
         self,
@@ -115,3 +115,41 @@ class FootballRepository:
         self.session.flush()
 
         return statistics
+
+    def get_or_create_bookmaker(self, name: str) -> Bookmaker:
+        bookmaker = self.session.query(Bookmaker).filter_by(name=name).one_or_none()
+
+        if bookmaker is None:
+            bookmaker = Bookmaker(name=name)
+            self.session.add(bookmaker)
+            self.session.flush()
+
+        return bookmaker
+
+    def create_odds(
+        self,
+        match_id: int,
+        source: str,
+        market: str,
+        selection: str,
+        line: float | None,
+        phase: str,
+        price: float,
+    ) -> Odds:
+        bookmaker = self.get_or_create_bookmaker(source)
+
+        odds = Odds(
+            match_id=match_id,
+            bookmaker_id=bookmaker.id,
+            source=source.upper(),
+            market=market,
+            selection=selection,
+            line=Decimal(str(line)) if line is not None else None,
+            price=Decimal(str(price)),
+            phase=phase,
+        )
+
+        self.session.add(odds)
+        self.session.flush()
+
+        return odds

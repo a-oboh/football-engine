@@ -3,7 +3,7 @@ from decimal import Decimal
 from sqlalchemy import ForeignKey, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from ..base import Base
+from football_analytics.db.base import Base
 
 
 class Odds(Base):
@@ -18,14 +18,10 @@ class Odds(Base):
 
     bookmaker_id: Mapped[int | None] = mapped_column(
         ForeignKey("bookmakers.id"),
+        nullable=True,
     )
 
-    source_type: Mapped[str] = mapped_column(
-        String(20),
-        nullable=False,
-    )
-
-    source_name: Mapped[str] = mapped_column(
+    source: Mapped[str] = mapped_column(
         String(100),
         nullable=False,
     )
@@ -42,15 +38,15 @@ class Odds(Base):
 
     line: Mapped[Decimal | None] = mapped_column(
         Numeric(6, 2),
+        nullable=True,
+    )
+
+    phase: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
     )
 
     price: Mapped[Decimal] = mapped_column(
         Numeric(10, 4),
         nullable=False,
-    )
-
-    snapshot: Mapped[str] = mapped_column(
-        String(20),
-        nullable=False,
-        default="CLOSE",
     )

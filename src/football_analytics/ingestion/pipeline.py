@@ -75,6 +75,12 @@ def ingest(path: Path):
                     **stats_data,
                 )
 
+                for odd in match_odds:
+                    repository.create_odds(
+                        match_id=match.id,
+                        **odd,
+                    )
+
             session.commit()
 
         except Exception:
