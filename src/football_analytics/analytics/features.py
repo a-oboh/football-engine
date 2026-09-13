@@ -88,7 +88,9 @@ def build_match_features(
         raise ValueError("form_window must be at least 1.")
 
     work = df.copy()
-    work["_match_date"] = pd.to_datetime(work["Date"], errors="raise")
+    work["_match_date"] = pd.to_datetime(
+        work["Date"], format="%d/%m/%Y", errors="raise"
+    )
     work["_input_order"] = range(len(work))
     work = work.sort_values(
         ["_match_date", "_input_order"], kind="mergesort"
