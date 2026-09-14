@@ -94,3 +94,83 @@ def test_build_match_features_rejects_invalid_input(
 
     with pytest.raises(ValueError, match=message):
         build_match_features(matches, **kwargs)
+
+def test_form_window_limits_recent_form_to_prior_matches() -> None:
+    matches = pd.DataFrame(
+        [
+            # A win: 3 points
+            {
+                "Date": "01/08/2025",
+                "HomeTeam": "A",
+                "AwayTeam": "B",
+                "FTHG": 2,
+                "FTAG": 0,
+                "FTR": "H",
+            },
+            # A draw: 1 point
+            {
+                "Date": "08/08/2025",
+                "HomeTeam": "A",
+                "AwayTeam": "C",
+                "FTHG": 1,
+                "FTAG": 1,
+                "FTR": "D",
+            },
+            # A win: 3 points
+            {
+                "Date": "15/08/2025",
+                "HomeTeam": "A",
+                "AwayTeam": "D",
+                "FTHG": 3,
+                "FTAG": 0,
+                "FTR": "H",
+            },
+            # A loss. Its features should include only the previous 2 matches.
+            {
+                "Date": "22/08/2025",
+                "HomeTeam": "A",
+                "AwayTeam": "E",
+                "FTHG": 0,
+                "FTAG": 1,
+                "FTR": "A",
+            },
+        ]
+    )
+
+    features = build_match_features(matches, form_window=2)
+    before_fourth_match = features.iloc[3]
+
+    assert before_fourth_match["home_matches_played"] == 3
+    assert before_fourth_match["home_form_points"] == 4  # 1 + 3, not 3 + 1 + 3
+
+def test_same_date_matches_preserve_input_order() -> None:
+    matches = pd.DataFrame(
+        [
+            {
+                "Date": "01/08/2025",
+                "HomeTeam": "A",
+                "AwayTeam": "B",
+                "FTHG": 2,
+                "FTAG": 0,
+                "FTR": "H",
+            },
+            {
+                "Date": "01/08/2025",
+                "HomeTeam": "C",
+                "AwayTeam": "A",
+                "FTHG": 0,
+                "FTAG": 1,
+                "FTR": "A",
+            },
+        ]
+    )
+
+    features = build_match_features(matches)
+
+    # Equal dates retain CSV/input order.
+    assert features["home_team"].tolist() == ["A", "C"]
+
+    # Under that deterministic ordering, the second row sees A's first result.
+    second = features.iloc[1]
+    assert second["away_matches_played"] == 1
+    assert second["away_points_per_match"] == 3.0
