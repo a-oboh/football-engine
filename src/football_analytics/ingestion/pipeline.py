@@ -1,3 +1,4 @@
+from football_analytics.analytics import build_match_features
 from football_analytics.ingestion.odds_transformer import transform_odds
 from football_analytics.db.repository import FootballRepository
 from football_analytics.db.session import SessionLocal
@@ -23,6 +24,10 @@ def ingest(path: Path):
     profile(df)
 
     df = clean(df)
+
+    features = build_match_features(df)
+    print(features.shape)
+    print(features.head())
 
     season_name = extract_season(df)
     team_names = extract_teams(df)
