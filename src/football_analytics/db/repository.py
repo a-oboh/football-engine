@@ -1,22 +1,60 @@
 from decimal import Decimal
-from tracemalloc import Statistic
-from sqlalchemy.orm import Session
-from sqlalchemy import select
 
-from .models import Season, Team, Referee, Match, MatchStatistics, Bookmaker, Odds
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from .models import (
+    Bookmaker,
+    Competition,
+    Match,
+    MatchStatistics,
+    Odds,
+    Referee,
+    Season,
+    Team,
+)
 
 
 class FootballRepository:
     def __init__(self, session: Session):
         self.session = session
 
-    def get_or_create_season(self, name: str) -> Season:
-        stmt = select(Season).where(Season.name == name)
+    def get_or_create_competition(self, *, name: str, code: str) -> Competition:
+        competition = self.session.scalar(
+            select(Competition).where(Competition.code == code)
+        )
+
+        if competition is not None:
+            if competition.name != name:
+                raise ValueError("Competition code already belongs to another name")
+            return competition
+
+        existing_name = self.session.scalar(
+            select(Competition).where(Competition.name == name)
+        )
+        if existing_name is not None:
+            raise ValueError("Competition name already belongs to another code")
+
+        competition = Competition(name=name, code=code)
+        self.session.add(competition)
+        self.session.flush()
+        return competition
+
+    def get_or_create_season(
+        self,
+        *,
+        competition: Competition,
+        name: str,
+    ) -> Season:
+        stmt = select(Season).where(
+            Season.competition_id == competition.id,
+            Season.name == name,
+        )
 
         season = self.session.scalar(stmt)
 
         if season is None:
-            season = Season(name=name)
+            season = Season(competition=competition, name=name)
             self.session.add(season)
             self.session.flush()
 

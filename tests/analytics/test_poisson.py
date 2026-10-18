@@ -3,6 +3,7 @@ from math import exp
 import pytest
 
 from football_analytics.analytics.poisson import (
+    ExpectedGoals,
     SequentialPoissonModel,
     poisson_probability,
 )
@@ -12,6 +13,72 @@ def test_poisson_probability_matches_the_formula() -> None:
     probability = poisson_probability(goals=2, expected_goals=1.5)
 
     assert probability == pytest.approx(exp(-1.5) * 1.5**2 / 2)
+
+
+def test_score_probability_matrix_has_expected_shape_and_probabilities() -> None:
+    expected_goals = ExpectedGoals(home=1.2, away=0.8)
+
+    matrix = expected_goals.score_probability_matrix(max_goals=2)
+
+    assert matrix.shape == (3, 3)
+    assert len(matrix.probabilities) == 3
+    assert all(len(row) == 3 for row in matrix.probabilities)
+    assert matrix.probability(1, 0) == pytest.approx(
+        poisson_probability(1, 1.2) * poisson_probability(0, 0.8)
+    )
+    assert matrix.probabilities[1][0] == matrix.probability(1, 0)
+
+
+def test_score_probability_matrix_aggregates_home_draw_away_probabilities() -> None:
+    expected_goals = ExpectedGoals(home=1.2, away=0.8)
+    matrix = expected_goals.score_probability_matrix(max_goals=1)
+
+    outcomes = matrix.outcome_probabilities()
+
+    expected_home_win = matrix.probability(1, 0)
+    expected_draw = matrix.probability(0, 0) + matrix.probability(1, 1)
+    expected_away_win = matrix.probability(0, 1)
+    assert outcomes.home_win == pytest.approx(expected_home_win)
+    assert outcomes.draw == pytest.approx(expected_draw)
+    assert outcomes.away_win == pytest.approx(expected_away_win)
+    assert outcomes.total_probability_mass == pytest.approx(
+        expected_home_win + expected_draw + expected_away_win
+    )
+
+
+def test_score_probability_matrix_validates_inputs() -> None:
+    with pytest.raises(ValueError, match="Expected goals must not be negative"):
+        ExpectedGoals(home=-0.1, away=1.0)
+
+    with pytest.raises(ValueError, match="Expected goals must be finite"):
+        ExpectedGoals(home=float("inf"), away=1.0)
+
+    with pytest.raises(ValueError, match="max_goals must be an integer"):
+        ExpectedGoals(home=1.0, away=1.0).score_probability_matrix(max_goals=1.5)
+
+    with pytest.raises(ValueError, match="max_goals must not be negative"):
+        ExpectedGoals(home=1.0, away=1.0).score_probability_matrix(max_goals=-1)
+
+    matrix = ExpectedGoals(home=1.0, away=1.0).score_probability_matrix(max_goals=1)
+
+    with pytest.raises(ValueError, match="home_goals must be within"):
+        matrix.probability(2, 0)
+
+    with pytest.raises(ValueError, match="away_goals must not be negative"):
+        matrix.probability(0, -1)
+
+
+def test_finite_score_probability_mass_is_truncated_and_monotonic() -> None:
+    expected_goals = ExpectedGoals(home=1.5, away=1.1)
+
+    small_matrix = expected_goals.score_probability_matrix(max_goals=1)
+    larger_matrix = expected_goals.score_probability_matrix(max_goals=8)
+
+    assert 0 < small_matrix.total_probability_mass < 1
+    assert small_matrix.total_probability_mass < larger_matrix.total_probability_mass
+    assert larger_matrix.total_probability_mass < 1
+    retained_mass = larger_matrix.outcome_probabilities().total_probability_mass
+    assert retained_mass == pytest.approx(larger_matrix.total_probability_mass)
 
 
 def test_initial_state_uses_configured_league_rates_and_neutral_strengths() -> None:

@@ -1,8 +1,9 @@
+from pathlib import Path
+
 from football_analytics.analytics import build_match_features
-from football_analytics.ingestion.odds_transformer import transform_odds
 from football_analytics.db.repository import FootballRepository
 from football_analytics.db.session import SessionLocal
-from pathlib import Path
+from football_analytics.ingestion.odds_transformer import transform_odds
 
 from .cleaner import clean
 from .profiler import profile
@@ -17,7 +18,13 @@ from .transformer import (
 from .validator import validate
 
 
-def ingest(path: Path):
+def ingest(
+    path: Path,
+    *,
+    competition_name: str,
+    competition_code: str,
+) -> None:
+    """Ingest one season's matches for the specified competition."""
     df = read_csv(path)
 
     validate(df)
@@ -43,7 +50,14 @@ def ingest(path: Path):
 
         try:
             # Reference entities
-            season = repository.get_or_create_season(season_name)
+            competition = repository.get_or_create_competition(
+                name=competition_name,
+                code=competition_code,
+            )
+            season = repository.get_or_create_season(
+                competition=competition,
+                name=season_name,
+            )
 
             teams = {name: repository.get_or_create_team(name) for name in team_names}
 
@@ -52,7 +66,12 @@ def ingest(path: Path):
             }
 
             # Matches + statistics
-            for match_data, stats_data, match_odds in zip(matches, statistics, odds):
+            for match_data, stats_data, match_odds in zip(
+                matches,
+                statistics,
+                odds,
+                strict=True,
+            ):
                 home_team = teams[match_data["home_team_name"]]
                 away_team = teams[match_data["away_team_name"]]
 
