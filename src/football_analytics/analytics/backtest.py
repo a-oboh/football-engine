@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 import pandas as pd
+
+from football_analytics.db.repository import CompletedMatch
 
 from .poisson import SequentialPoissonModel
 
@@ -74,6 +78,38 @@ def backtest_sequential_poisson(
         )
 
     return pd.DataFrame(predictions)
+
+
+def backtest_completed_matches(
+    matches: Sequence[CompletedMatch],
+    *,
+    max_goals: int = 10,
+    initial_home_goals: float = 1.5,
+    initial_away_goals: float = 1.2,
+) -> pd.DataFrame:
+    """Backtest the sequential model using canonical database match records."""
+    if not matches:
+        raise ValueError("Cannot backtest an empty match history.")
+
+    frame = pd.DataFrame(
+        [
+            {
+                "Date": match.match_date.strftime("%d/%m/%Y"),
+                "HomeTeam": match.home_team,
+                "AwayTeam": match.away_team,
+                "FTHG": match.home_goals,
+                "FTAG": match.away_goals,
+                "FTR": match.result,
+            }
+            for match in matches
+        ]
+    )
+    return backtest_sequential_poisson(
+        frame,
+        max_goals=max_goals,
+        initial_home_goals=initial_home_goals,
+        initial_away_goals=initial_away_goals,
+    )
 
 
 def _validate_matches(matches: pd.DataFrame) -> None:

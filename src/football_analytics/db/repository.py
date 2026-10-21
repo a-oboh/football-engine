@@ -1,7 +1,10 @@
+from collections.abc import Sequence
+from dataclasses import dataclass
+from datetime import date, time
 from decimal import Decimal
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from .models import (
     Bookmaker,
@@ -13,6 +16,21 @@ from .models import (
     Season,
     Team,
 )
+
+
+@dataclass(frozen=True)
+class CompletedMatch:
+    """A completed match in the shape required by analytics consumers."""
+
+    competition_code: str
+    season_name: str
+    match_date: date
+    kickoff_time: time | None
+    home_team: str
+    away_team: str
+    home_goals: int
+    away_goals: int
+    result: str
 
 
 class FootballRepository:
@@ -59,6 +77,66 @@ class FootballRepository:
             self.session.flush()
 
         return season
+
+    def get_completed_matches(
+        self,
+        *,
+        competition_code: str,
+        season_names: Sequence[str] | None = None,
+    ) -> list[CompletedMatch]:
+        """Return completed matches for a competition in chronological order.
+
+        Passing ``season_names`` restricts the history to those seasons. Omit it
+        to retrieve every stored season for the selected competition.
+        """
+        if not competition_code.strip():
+            raise ValueError("competition_code must not be blank")
+        if isinstance(season_names, str):
+            raise ValueError("season_names must be a sequence of season names")
+
+        selected_seasons = tuple(season_names) if season_names is not None else ()
+        if any(not season_name.strip() for season_name in selected_seasons):
+            raise ValueError("season_names must not contain blank values")
+
+        home_team = aliased(Team)
+        away_team = aliased(Team)
+        statement = (
+            select(
+                Competition.code.label("competition_code"),
+                Season.name.label("season_name"),
+                Match.match_date,
+                Match.kickoff_time,
+                home_team.name.label("home_team"),
+                away_team.name.label("away_team"),
+                Match.home_goals,
+                Match.away_goals,
+                Match.result,
+            )
+            .select_from(Match)
+            .join(Season, Match.season_id == Season.id)
+            .join(Competition, Season.competition_id == Competition.id)
+            .join(home_team, Match.home_team_id == home_team.id)
+            .join(away_team, Match.away_team_id == away_team.id)
+            .where(Competition.code == competition_code)
+            .order_by(Match.match_date, Match.id)
+        )
+        if selected_seasons:
+            statement = statement.where(Season.name.in_(selected_seasons))
+
+        return [
+            CompletedMatch(
+                competition_code=row.competition_code,
+                season_name=row.season_name,
+                match_date=row.match_date,
+                kickoff_time=row.kickoff_time,
+                home_team=row.home_team,
+                away_team=row.away_team,
+                home_goals=row.home_goals,
+                away_goals=row.away_goals,
+                result=row.result,
+            )
+            for row in self.session.execute(statement).mappings()
+        ]
 
     def get_or_create_team(self, name: str) -> Team:
         team = self.session.scalar(select(Team).where(Team.name == name))
