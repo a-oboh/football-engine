@@ -194,6 +194,52 @@ class FootballRepository:
 
         return match
 
+    def get_or_create_match(
+        self,
+        *,
+        season_id: int,
+        home_team_id: int,
+        away_team_id: int,
+        referee_id: int | None,
+        match_date: date,
+        kickoff_time: time | None,
+        home_goals: int,
+        away_goals: int,
+        result: str,
+        home_half_time_goals: int | None,
+        away_half_time_goals: int | None,
+        half_time_result: str | None,
+    ) -> tuple[Match, bool]:
+        """Return an existing match or create it from a completed result."""
+        match = self.session.scalar(
+            select(Match).where(
+                Match.season_id == season_id,
+                Match.home_team_id == home_team_id,
+                Match.away_team_id == away_team_id,
+                Match.match_date == match_date,
+            )
+        )
+        if match is not None:
+            return match, False
+
+        return (
+            self.create_match(
+                season_id=season_id,
+                home_team_id=home_team_id,
+                away_team_id=away_team_id,
+                referee_id=referee_id,
+                match_date=match_date,
+                kickoff_time=kickoff_time,
+                home_goals=home_goals,
+                away_goals=away_goals,
+                result=result,
+                home_half_time_goals=home_half_time_goals,
+                away_half_time_goals=away_half_time_goals,
+                half_time_result=half_time_result,
+            ),
+            True,
+        )
+
     def create_match_statistics(
         self,
         *,

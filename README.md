@@ -131,3 +131,38 @@ You can also run the module directly:
 ```bash
 uv run python -m football_analytics
 ```
+
+## Ingest completed results and predict a fixture
+
+Ingest a CSV containing completed matches. At minimum it must contain `Date`,
+`HomeTeam`, `AwayTeam`, `FTHG`, `FTAG`, and `FTR`. Optional statistics and odds
+columns are stored when present.
+
+```bash
+uv run football-analytics ingest path/to/epl_2025_26.csv \
+  --competition-name "Premier League" \
+  --competition-code EPL \
+  --season 2025-26
+```
+
+Run this again after new matches are completed; matches already stored for the
+same season, teams, and date are skipped. Rows for unplayed fixtures with blank
+final scores are ignored. Use explicit season names for every file, especially
+for an in-progress season.
+
+After ingesting historical seasons and the completed matches from the current
+season, predict an upcoming fixture:
+
+```bash
+uv run football-analytics predict \
+  --competition-code EPL \
+  --season 2023-24 \
+  --season 2024-25 \
+  --season 2025-26 \
+  --home-team "Arsenal" \
+  --away-team "Chelsea"
+```
+
+The command prints expected goals and H/D/A probabilities. It uses only the
+completed matches in the selected seasons; the requested fixture is never
+recorded in the database before it is predicted.

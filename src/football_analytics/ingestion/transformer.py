@@ -16,22 +16,26 @@ def extract_teams(df: pd.DataFrame) -> set[str]:
 
 
 def extract_referees(df: pd.DataFrame) -> set[str]:
+    if "Referee" not in df:
+        return set()
     return set(df["Referee"].dropna())
+
 
 def transform_match(row: pd.Series) -> dict:
     return {
         "home_team_name": row["HomeTeam"],
         "away_team_name": row["AwayTeam"],
-        "referee_name": row["Referee"],
+        "referee_name": _optional_text(row.get("Referee")),
         "match_date": row["Date"].date(),
-        "kickoff_time": row["Time"],
+        "kickoff_time": _optional_time(row.get("Time")),
         "home_goals": int(row["FTHG"]),
         "away_goals": int(row["FTAG"]),
         "result": row["FTR"],
-        "home_half_time_goals": int(row["HTHG"]),
-        "away_half_time_goals": int(row["HTAG"]),
-        "half_time_result": row["HTR"],
+        "home_half_time_goals": _optional_int(row.get("HTHG")),
+        "away_half_time_goals": _optional_int(row.get("HTAG")),
+        "half_time_result": _optional_text(row.get("HTR")),
     }
+
 
 def transform_match_statistics(row: pd.Series) -> dict:
     return {
@@ -48,3 +52,21 @@ def transform_match_statistics(row: pd.Series) -> dict:
         "home_red_cards": int(row["HR"]),
         "away_red_cards": int(row["AR"]),
     }
+
+
+def _optional_int(value: object) -> int | None:
+    if pd.isna(value):
+        return None
+    return int(value)
+
+
+def _optional_text(value: object) -> str | None:
+    if pd.isna(value):
+        return None
+    return str(value)
+
+
+def _optional_time(value: object):
+    if pd.isna(value):
+        return None
+    return value
