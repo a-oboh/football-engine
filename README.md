@@ -150,6 +150,19 @@ same season, teams, and date are skipped. Rows for unplayed fixtures with blank
 final scores are ignored. Use explicit season names for every file, especially
 for an in-progress season.
 
+To ingest several seasons for the same competition, place the CSV files in one
+directory. Each filename must include its season, for example
+`epl_2023_24.csv`, `epl_2024_25.csv`, and `epl_2025_26.csv`.
+
+```bash
+uv run football-analytics bulk-ingest path/to/epl-seasons \
+  --competition-name "Premier League" \
+  --competition-code EPL
+```
+
+The bulk operation is atomic: if any CSV fails validation or its filename does
+not contain a season token, no files from that directory are committed.
+
 After ingesting historical seasons and the completed matches from the current
 season, predict an upcoming fixture:
 

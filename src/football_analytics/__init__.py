@@ -9,6 +9,7 @@ from pathlib import Path
 from football_analytics.analytics import predict_fixture
 from football_analytics.db.repository import FootballRepository
 from football_analytics.db.session import SessionLocal
+from football_analytics.ingestion.bulk import bulk_ingest
 from football_analytics.ingestion.pipeline import ingest
 
 
@@ -20,6 +21,14 @@ def main() -> None:
     ingest_parser = subcommands.add_parser("ingest", help="Ingest completed matches")
     ingest_parser.add_argument("path", type=Path)
     _add_competition_arguments(ingest_parser, multiple_seasons=False)
+
+    bulk_ingest_parser = subcommands.add_parser(
+        "bulk-ingest",
+        help="Ingest every season CSV in one directory",
+    )
+    bulk_ingest_parser.add_argument("directory", type=Path)
+    bulk_ingest_parser.add_argument("--competition-name", required=True)
+    bulk_ingest_parser.add_argument("--competition-code", required=True)
 
     predict_parser = subcommands.add_parser(
         "predict",
@@ -46,6 +55,33 @@ def main() -> None:
                     "created_matches": result.created_matches,
                     "existing_matches": result.existing_matches,
                     "ignored_incomplete_matches": result.ignored_incomplete_matches,
+                },
+                indent=2,
+            )
+        )
+        return
+
+    if arguments.command == "bulk-ingest":
+        result = bulk_ingest(
+            arguments.directory,
+            competition_name=arguments.competition_name,
+            competition_code=arguments.competition_code,
+        )
+        print(
+            json.dumps(
+                {
+                    "created_matches": result.created_matches,
+                    "existing_matches": result.existing_matches,
+                    "ignored_incomplete_matches": result.ignored_incomplete_matches,
+                    "files": [
+                        {
+                            "path": str(path),
+                            "season_name": ingestion.season_name,
+                            "created_matches": ingestion.created_matches,
+                            "existing_matches": ingestion.existing_matches,
+                        }
+                        for path, ingestion in result.results
+                    ],
                 },
                 indent=2,
             )
