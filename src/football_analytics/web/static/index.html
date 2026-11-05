@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Football Quant</title>
+    <link rel="stylesheet" href="/assets/styles.css" />
+    <script defer src="/assets/app.js"></script>
+  </head>
+  <body>
+    <main>
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Independent match model</p>
+          <h1>Football Quant</h1>
+        </div>
+        <p class="status"><span></span> Data-backed forecasts</p>
+      </header>
+
+      <section class="fixture-controls" aria-label="Fixture selection">
+        <div class="control-grid">
+          <label>
+            Competition
+            <select id="competition"></select>
+          </label>
+          <label>
+            Historical seasons
+            <select id="seasons" multiple size="4"></select>
+          </label>
+          <label>
+            Home team
+            <select id="home-team"></select>
+          </label>
+          <label>
+            Away team
+            <select id="away-team"></select>
+          </label>
+        </div>
+        <button id="forecast" type="button">Run forecast</button>
+        <p id="message" class="message" aria-live="polite"></p>
+      </section>
+
+      <section id="results" class="results" hidden>
+        <div class="fixture-heading">
+          <p class="eyebrow">Fixture forecast</p>
+          <h2 id="fixture-title"></h2>
+        </div>
+
+        <div class="score-grid">
+          <article class="score-panel">
+            <p>Most likely half-time</p>
+            <strong id="half-time-score"></strong>
+            <span id="half-time-probability"></span>
+          </article>
+          <article class="score-panel primary-score">
+            <p>Most likely full-time</p>
+            <strong id="full-time-score"></strong>
+            <span id="full-time-probability"></span>
+          </article>
+          <article class="score-panel">
+            <p>Expected goals</p>
+            <strong id="expected-goals"></strong>
+            <span>Home / away</span>
+          </article>
+        </div>
+
+        <section class="market-section" aria-label="Model markets">
+          <div class="section-heading">
+            <h2>Model markets</h2>
+            <p>Probability and no-margin decimal price</p>
+          </div>
+          <div id="markets" class="market-grid"></div>
+        </section>
+      </section>
+
+      <footer>
+        Forecasts use completed match history and an independent Poisson score
+        model. Fair odds are model benchmarks, not bookmaker quotes.
+      </footer>
+    </main>
+  </body>
+</html>

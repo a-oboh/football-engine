@@ -4,11 +4,12 @@ from .backtest import backtest_completed_matches, backtest_sequential_poisson
 from .evaluation import OutcomeEvaluation, evaluate_outcome_probabilities
 from .experiments import CompetitionExperiment, run_poisson_experiment
 from .features import build_match_features
-from .predictions import FixturePrediction, predict_fixture
+from .predictions import BettingMarkets, FixturePrediction, predict_fixture
 
 __all__ = [
     "backtest_completed_matches",
     "backtest_sequential_poisson",
+    "BettingMarkets",
     "build_match_features",
     "CompetitionExperiment",
     "evaluate_outcome_probabilities",

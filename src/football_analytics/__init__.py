@@ -39,6 +39,13 @@ def main() -> None:
     predict_parser.add_argument("--away-team", required=True)
     predict_parser.add_argument("--max-goals", type=int, default=10)
 
+    serve_parser = subcommands.add_parser(
+        "serve",
+        help="Run the local prediction dashboard",
+    )
+    serve_parser.add_argument("--host", default="127.0.0.1")
+    serve_parser.add_argument("--port", type=int, default=8000)
+
     arguments = parser.parse_args()
     if arguments.command == "ingest":
         result = ingest(
@@ -88,6 +95,17 @@ def main() -> None:
         )
         return
 
+    if arguments.command == "serve":
+        import uvicorn
+
+        uvicorn.run(
+            "football_analytics.web.app:create_app",
+            factory=True,
+            host=arguments.host,
+            port=arguments.port,
+        )
+        return
+
     with SessionLocal() as session:
         prediction = predict_fixture(
             FootballRepository(session),
@@ -105,10 +123,39 @@ def main() -> None:
                 "away_team": prediction.away_team,
                 "expected_home_goals": prediction.expected_goals.home,
                 "expected_away_goals": prediction.expected_goals.away,
+                "predicted_full_time_score": {
+                    "FTHG": prediction.full_time_score.home_goals,
+                    "FTAG": prediction.full_time_score.away_goals,
+                    "probability": prediction.full_time_score.probability,
+                },
+                "predicted_half_time_score": {
+                    "HTHG": prediction.half_time.score.home_goals,
+                    "HTAG": prediction.half_time.score.away_goals,
+                    "expected_home_goals": prediction.half_time.expected_goals.home,
+                    "expected_away_goals": prediction.half_time.expected_goals.away,
+                    "probability": prediction.half_time.score.probability,
+                },
                 "home_win_probability": prediction.outcomes.home_win,
                 "draw_probability": prediction.outcomes.draw,
                 "away_win_probability": prediction.outcomes.away_win,
                 "probability_mass": prediction.outcomes.total_probability_mass,
+                "markets": {
+                    "home_win": _market_json(prediction.markets.home_win),
+                    "draw": _market_json(prediction.markets.draw),
+                    "away_win": _market_json(prediction.markets.away_win),
+                    "over_2_5_goals": _market_json(
+                        prediction.markets.over_2_5_goals
+                    ),
+                    "under_2_5_goals": _market_json(
+                        prediction.markets.under_2_5_goals
+                    ),
+                    "both_teams_to_score_yes": _market_json(
+                        prediction.markets.both_teams_to_score_yes
+                    ),
+                    "both_teams_to_score_no": _market_json(
+                        prediction.markets.both_teams_to_score_no
+                    ),
+                },
             },
             indent=2,
         )
@@ -131,3 +178,10 @@ def _add_competition_arguments(
     else:
         parser.add_argument("--season", required=True)
         parser.add_argument("--competition-name", required=True)
+
+
+def _market_json(market) -> dict[str, float | None]:
+    return {
+        "probability": market.probability,
+        "fair_odds": market.fair_odds,
+    }

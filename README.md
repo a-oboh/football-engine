@@ -154,6 +154,22 @@ To ingest several seasons for the same competition, place the CSV files in one
 directory. Each filename must include its season, for example
 `epl_2023_24.csv`, `epl_2024_25.csv`, and `epl_2025_26.csv`.
 
+### Bulk filename convention
+
+`bulk-ingest` assigns every CSV in the selected directory to the competition
+given on the command line. It derives only the season from the filename.
+
+| Filename | Stored season |
+| --- | --- |
+| `epl_2023_24.csv` | `2023-24` |
+| `epl-2024-25.csv` | `2024-25` |
+| `epl_2025_2026.csv` | `2025-26` |
+
+Use a four-digit start year followed by `-` or `_`, then either a two- or
+four-digit end year. CSV files without one of these season tokens, such as
+`latest.csv`, are rejected rather than assigned an uncertain season. Put only
+the season CSVs you intend to ingest directly in the selected directory.
+
 ```bash
 uv run football-analytics bulk-ingest path/to/epl-seasons \
   --competition-name "Premier League" \
@@ -176,6 +192,13 @@ uv run football-analytics predict \
   --away-team "Chelsea"
 ```
 
-The command prints expected goals and H/D/A probabilities. It uses only the
-completed matches in the selected seasons; the requested fixture is never
-recorded in the database before it is predicted.
+The command prints expected goals, the most likely score fields (`FTHG`,
+`FTAG`, `HTHG`, and `HTAG`), and core markets: 1X2, Over/Under 2.5 goals, and
+Both Teams To Score. Each market includes its model probability and `fair_odds`
+(decimal odds calculated as `1 / probability`). Fair odds deliberately exclude
+any bookmaker margin and are a model benchmark, not a bookmaker quote.
+
+Half-time expected goals are calibrated using the selected seasons' observed
+share of goals scored before half-time. The command uses only completed matches
+in the selected seasons; the requested fixture is never recorded in the
+database before it is predicted.

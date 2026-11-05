@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from datetime import date, time
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import select, union
 from sqlalchemy.orm import Session, aliased
 
 from .models import (
@@ -31,6 +31,17 @@ class CompletedMatch:
     home_goals: int
     away_goals: int
     result: str
+    home_half_time_goals: int | None = None
+    away_half_time_goals: int | None = None
+
+
+@dataclass(frozen=True)
+class CompetitionSummary:
+    """A competition exposed by the public prediction catalogue."""
+
+    code: str
+    name: str
+    seasons: tuple[str, ...]
 
 
 class FootballRepository:
@@ -111,6 +122,8 @@ class FootballRepository:
                 Match.home_goals,
                 Match.away_goals,
                 Match.result,
+                Match.home_half_time_goals,
+                Match.away_half_time_goals,
             )
             .select_from(Match)
             .join(Season, Match.season_id == Season.id)
@@ -134,9 +147,64 @@ class FootballRepository:
                 home_goals=row.home_goals,
                 away_goals=row.away_goals,
                 result=row.result,
+                home_half_time_goals=row.home_half_time_goals,
+                away_half_time_goals=row.away_half_time_goals,
             )
             for row in self.session.execute(statement).mappings()
         ]
+
+    def get_prediction_competitions(self) -> list[CompetitionSummary]:
+        """Return competitions and stored seasons available for forecasts."""
+        rows = self.session.execute(
+            select(Competition.code, Competition.name, Season.name)
+            .join(Season, Season.competition_id == Competition.id)
+            .order_by(Competition.name, Season.name)
+        ).all()
+        competitions: dict[tuple[str, str], list[str]] = {}
+        for code, name, season_name in rows:
+            competitions.setdefault((code, name), []).append(season_name)
+
+        return [
+            CompetitionSummary(code=code, name=name, seasons=tuple(seasons))
+            for (code, name), seasons in competitions.items()
+        ]
+
+    def get_team_names(
+        self,
+        *,
+        competition_code: str,
+        season_names: Sequence[str],
+    ) -> list[str]:
+        """Return teams with completed matches in the selected competition history."""
+        if not competition_code.strip():
+            raise ValueError("competition_code must not be blank")
+        if isinstance(season_names, str) or not season_names:
+            raise ValueError("season_names must contain at least one season name")
+
+        selected_seasons = tuple(season_names)
+        if any(not season_name.strip() for season_name in selected_seasons):
+            raise ValueError("season_names must not contain blank values")
+
+        home_team = aliased(Team)
+        away_team = aliased(Team)
+        base = (
+            select(Match)
+            .join(Season, Match.season_id == Season.id)
+            .join(Competition, Season.competition_id == Competition.id)
+            .where(
+                Competition.code == competition_code,
+                Season.name.in_(selected_seasons),
+            )
+        )
+        team_names = union(
+            base.with_only_columns(home_team.name).join(
+                home_team, Match.home_team_id == home_team.id
+            ),
+            base.with_only_columns(away_team.name).join(
+                away_team, Match.away_team_id == away_team.id
+            ),
+        ).subquery()
+        return list(self.session.scalars(select(team_names.c.name).order_by(team_names.c.name)))
 
     def get_or_create_team(self, name: str) -> Team:
         team = self.session.scalar(select(Team).where(Team.name == name))
