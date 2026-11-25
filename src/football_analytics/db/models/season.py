@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Date, ForeignKey, String, UniqueConstraint
+from sqlalchemy import Boolean, Date, ForeignKey, SmallInteger, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..base import Base
@@ -37,5 +37,17 @@ class Season(Base):
     start_date: Mapped[Date | None] = mapped_column(Date)
 
     end_date: Mapped[Date | None] = mapped_column(Date)
+
+    api_football_year: Mapped[int | None] = mapped_column(
+        SmallInteger,
+        nullable=True,
+    )
+
+    is_current: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        server_default="false",
+        nullable=False,
+    )
 
     competition: Mapped[Competition] = relationship(back_populates="seasons")

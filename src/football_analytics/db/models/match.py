@@ -1,6 +1,14 @@
 from datetime import date, time
 
-from sqlalchemy import CheckConstraint, Date, ForeignKey, SmallInteger, String, Time
+from sqlalchemy import (
+    CheckConstraint,
+    Date,
+    ForeignKey,
+    Integer,
+    SmallInteger,
+    String,
+    Time,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..base import Base
@@ -10,6 +18,12 @@ class Match(Base):
     __tablename__ = "matches"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+
+    api_football_fixture_id: Mapped[int | None] = mapped_column(
+        Integer,
+        unique=True,
+        nullable=True,
+    )
 
     season_id: Mapped[int] = mapped_column(
         ForeignKey("seasons.id"),

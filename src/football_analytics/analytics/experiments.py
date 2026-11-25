@@ -80,6 +80,7 @@ def run_poisson_experiment(
         [match.competition_code for match in matches],
     )
     predictions.insert(1, "season_name", [match.season_name for match in matches])
+    predictions["match_id"] = [match.match_id for match in matches]
     target_predictions = predictions.loc[
         predictions["season_name"].isin(evaluation_seasons)
     ].reset_index(drop=True)

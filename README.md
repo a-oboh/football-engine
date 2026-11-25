@@ -71,6 +71,9 @@ If you created the database with your current system user:
 
 ```env
 DATABASE_URL=postgresql+psycopg://localhost:5432/football_analytics
+API_FOOTBALL_KEY=your_api_football_v3_key_here
+API_FOOTBALL_BASE_URL=https://v3.football.api-sports.io
+CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 ```
 
 ### 5. Run database migrations
@@ -202,3 +205,43 @@ Half-time expected goals are calibrated using the selected seasons' observed
 share of goals scored before half-time. The command uses only completed matches
 in the selected seasons; the requested fixture is never recorded in the
 database before it is predicted.
+
+## Live Data Ingestion (`api-football.com` v3)
+
+Once `API_FOOTBALL_KEY` is configured in `.env`, you can sync completed fixtures (`FT`), upcoming scheduled fixtures (`NS`/`TBD`), match statistics, and pre-match bookmaker odds directly from `api-football.com`:
+
+```bash
+# Sync fixtures, match statistics, and pre-match bookmaker odds
+uv run football-analytics sync-fixtures \
+  --competition-code E0 \
+  --season 2024-2025 \
+  --include-stats \
+  --include-odds
+```
+
+Team names from `api-football.com` are automatically reconciled with historical CSV names via the `team_aliases` table so sequential Poisson histories remain unbroken across data sources.
+
+## FastAPI `/api/v1` Server & Football Engine Lab UI
+
+Start the FastAPI backend server:
+
+```bash
+uv run football-analytics serve --host 127.0.0.1 --port 8000 --reload
+```
+
+- **Interactive Swagger UI**: `http://127.0.0.1:8000/docs`
+- **ReDoc API Reference**: `http://127.0.0.1:8000/redoc`
+- **Raw OpenAPI 3.1 Schema**: `http://127.0.0.1:8000/openapi.json`
+- **Core Endpoints**:
+  - `GET /api/v1/health` — Database & `api-football.com` configuration status
+  - `GET /api/v1/overview` — Corpus summary, competition coverage, and recent matches
+  - `GET /api/v1/competitions` & `GET /api/v1/teams` — Competitions, seasons, and teams
+  - `GET /api/v1/models` — Active model metadata, parameters, and assumptions
+  - `GET /api/v1/matches` & `GET /api/v1/matches/{id}` — Paginated historical match explorer with statistics & bookmaker odds
+  - `GET /api/v1/fixtures/upcoming` — Upcoming scheduled fixtures and pre-match odds
+  - `POST /api/v1/predictions` & `GET /api/v1/predictions/{slug}` — Run or retrieve reproducible match predictions (`hypothetical`, `historical` walk-forward cutoff, or `upcoming` modes)
+  - `POST /api/v1/evaluations` & `GET /api/v1/evaluations/{slug}` — Run or retrieve walk-forward backtests with calibration curves and bookmaker comparisons
+  - `POST /api/v1/sync/api-football` & `GET /api/v1/sync/status` — Trigger live `api-football.com` ingestion and inspect sync logs
+
+The companion React frontend lives in the sibling directory [`../football-web`](../football-web).
+

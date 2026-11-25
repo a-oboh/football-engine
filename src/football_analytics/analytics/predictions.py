@@ -1,9 +1,10 @@
-"""Predictions for upcoming fixtures using stored completed match history."""
+"""Predictions for upcoming and historical fixtures using stored match history."""
 
 from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import date
 from math import exp
 from typing import Protocol
 
@@ -11,6 +12,7 @@ from football_analytics.db.repository import CompletedMatch
 
 from .poisson import (
     ExpectedGoals,
+    MatchupExplanation,
     OutcomeProbabilities,
     ScoreProbabilityMatrix,
     SequentialPoissonModel,
@@ -31,7 +33,7 @@ class CompletedHistoryRepository(Protocol):
 
 @dataclass(frozen=True)
 class FixturePrediction:
-    """Score and betting-market forecast for one upcoming fixture.
+    """Score and betting-market forecast for one fixture.
 
     Decimal prices are fair odds calculated directly from this model's
     probabilities. They intentionally do not include a bookmaker margin.
@@ -46,11 +48,13 @@ class FixturePrediction:
     full_time_score: PredictedScore
     half_time: HalfTimePrediction
     markets: BettingMarkets
+    explanation: MatchupExplanation | None = None
+    top_scores: tuple[PredictedScore, ...] = ()
 
 
 @dataclass(frozen=True)
 class PredictedScore:
-    """The most likely exact score from a finite probability matrix."""
+    """An exact score and its probability from a finite probability matrix."""
 
     home_goals: int
     away_goals: int
@@ -96,28 +100,41 @@ def predict_fixture(
     max_goals: int = 10,
     initial_home_goals: float = 1.5,
     initial_away_goals: float = 1.2,
+    as_of_date: date | None = None,
+    exclude_match_id: int | None = None,
+    allow_neutral_teams: bool = False,
+    top_n_scores: int = 6,
 ) -> FixturePrediction:
-    """Predict an upcoming fixture from completed results in selected seasons."""
+    """Predict a fixture from completed results in selected seasons.
+
+    When ``as_of_date`` is provided (Historical Mode), only matches strictly
+    before ``as_of_date`` are replayed into the sequential model to prevent
+    future data leakage.
+    """
     _validate_fixture(home_team=home_team, away_team=away_team)
     selected_seasons = _validate_season_names(season_names)
-    matches = repository.get_completed_matches(
+    all_matches = repository.get_completed_matches(
         competition_code=competition_code,
         season_names=selected_seasons,
     )
-    if not matches:
+    if not all_matches:
         raise ValueError("No completed matches found for the selected seasons")
 
     known_teams = {
-        team
-        for match in matches
-        for team in (match.home_team, match.away_team)
+        team for match in all_matches for team in (match.home_team, match.away_team)
     }
     unknown_teams = {home_team, away_team} - known_teams
-    if unknown_teams:
+    if unknown_teams and not allow_neutral_teams:
         raise ValueError(
-            "Fixture contains teams absent from match history: "
-            f"{sorted(unknown_teams)}"
+            f"Fixture contains teams absent from match history: {sorted(unknown_teams)}"
         )
+
+    matches = [
+        match
+        for match in all_matches
+        if (as_of_date is None or match.match_date < as_of_date)
+        and (exclude_match_id is None or match.match_id != exclude_match_id)
+    ]
 
     model = SequentialPoissonModel(
         initial_home_goals=initial_home_goals,
@@ -131,16 +148,19 @@ def predict_fixture(
             match.away_goals,
         )
 
+    explanation = model.explain(home_team, away_team)
     expected_goals = model.predict(home_team, away_team)
     score_probabilities = expected_goals.score_probability_matrix(max_goals=max_goals)
     half_time_expected_goals = _half_time_expected_goals(
         matches,
         full_time_expected_goals=expected_goals,
+        allow_fallback=(as_of_date is not None or allow_neutral_teams),
     )
     half_time_scores = half_time_expected_goals.score_probability_matrix(
         max_goals=max_goals
     )
     outcomes = score_probabilities.outcome_probabilities()
+    ranked_scores = _rank_scores(score_probabilities, limit=max(1, top_n_scores))
     return FixturePrediction(
         competition_code=competition_code,
         home_team=home_team,
@@ -148,12 +168,14 @@ def predict_fixture(
         expected_goals=expected_goals,
         outcomes=outcomes,
         score_probabilities=score_probabilities,
-        full_time_score=_most_likely_score(score_probabilities),
+        full_time_score=ranked_scores[0],
         half_time=HalfTimePrediction(
             expected_goals=half_time_expected_goals,
             score=_most_likely_score(half_time_scores),
         ),
         markets=_build_markets(expected_goals, outcomes),
+        explanation=explanation,
+        top_scores=ranked_scores,
     )
 
 
@@ -178,6 +200,7 @@ def _half_time_expected_goals(
     matches: Sequence[CompletedMatch],
     *,
     full_time_expected_goals: ExpectedGoals,
+    allow_fallback: bool = False,
 ) -> ExpectedGoals:
     """Scale full-time expectations by the historical scoring share at half-time."""
     half_time_matches = [
@@ -187,13 +210,22 @@ def _half_time_expected_goals(
         and match.away_half_time_goals is not None
     ]
     if not half_time_matches:
+        if allow_fallback:
+            return ExpectedGoals(
+                home=full_time_expected_goals.home * 0.44,
+                away=full_time_expected_goals.away * 0.44,
+            )
         raise ValueError("No half-time results found for the selected seasons")
 
     home_half_time_goals = sum(
-        match.home_half_time_goals for match in half_time_matches
+        match.home_half_time_goals
+        for match in half_time_matches
+        if match.home_half_time_goals is not None
     )
     away_half_time_goals = sum(
-        match.away_half_time_goals for match in half_time_matches
+        match.away_half_time_goals
+        for match in half_time_matches
+        if match.away_half_time_goals is not None
     )
     home_full_time_goals = sum(match.home_goals for match in half_time_matches)
     away_full_time_goals = sum(match.away_goals for match in half_time_matches)
@@ -210,6 +242,30 @@ def _scoring_share(half_time_goals: int, full_time_goals: int) -> float:
     if not full_time_goals:
         return 0.5
     return half_time_goals / full_time_goals
+
+
+def _rank_scores(
+    matrix: ScoreProbabilityMatrix,
+    *,
+    limit: int = 6,
+) -> tuple[PredictedScore, ...]:
+    all_scores = [
+        PredictedScore(
+            home_goals=home_goals,
+            away_goals=away_goals,
+            probability=probability,
+        )
+        for home_goals, row in enumerate(matrix.probabilities)
+        for away_goals, probability in enumerate(row)
+    ]
+    all_scores.sort(
+        key=lambda item: (
+            -item.probability,
+            item.home_goals + item.away_goals,
+            item.home_goals,
+        )
+    )
+    return tuple(all_scores[:limit])
 
 
 def _most_likely_score(matrix: ScoreProbabilityMatrix) -> PredictedScore:
@@ -235,9 +291,7 @@ def _build_markets(
     total_goals = expected_goals.home + expected_goals.away
     under_2_5 = sum(poisson_probability(goals, total_goals) for goals in range(3))
     both_teams_to_score_no = (
-        exp(-expected_goals.home)
-        + exp(-expected_goals.away)
-        - exp(-total_goals)
+        exp(-expected_goals.home) + exp(-expected_goals.away) - exp(-total_goals)
     )
 
     return BettingMarkets(

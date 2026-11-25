@@ -58,6 +58,32 @@ class OutcomeProbabilities:
 
 
 @dataclass(frozen=True)
+class TeamVenueStrength:
+    """Venue-specific scoring and conceding rates used by the Poisson model."""
+
+    matches_played: int
+    goals_for: int
+    goals_against: int
+    goals_for_per_match: float | None
+    goals_against_per_match: float | None
+    attack_multiplier: float
+    defence_multiplier: float
+    used_neutral_fallback: bool
+
+
+@dataclass(frozen=True)
+class MatchupExplanation:
+    """Explainable breakdown of how expected goals were calculated."""
+
+    total_league_matches: int
+    league_home_goals: float
+    league_away_goals: float
+    used_initial_league_rates: bool
+    home_team_home_strength: TeamVenueStrength
+    away_team_away_strength: TeamVenueStrength
+
+
+@dataclass(frozen=True)
 class ScoreProbabilityMatrix:
     """Finite, truncated joint score probabilities for one match.
 
@@ -195,35 +221,66 @@ class SequentialPoissonModel:
 
     def predict(self, home_team: str, away_team: str) -> ExpectedGoals:
         """Return expected goals from the state before this match."""
-        self._validate_teams(home_team, away_team)
-
-        # Predictions are based only on league and team history already recorded,
-        # so the match being predicted cannot leak into its own expectation.
-        league_home_goals = self._league_home_goals
-        league_away_goals = self._league_away_goals
-        home = self._team_record(home_team)
-        away = self._team_record(away_team)
-
-        # Convert each team's venue-specific scoring profile into a multiplier
-        # around the current league average. Missing history stays neutral.
-        home_attack = self._relative_rate(
-            home.home.goals_for_per_match(), league_home_goals
-        )
-        away_defence = self._relative_rate(
-            away.away.goals_against_per_match(), league_home_goals
-        )
-        away_attack = self._relative_rate(
-            away.away.goals_for_per_match(), league_away_goals
-        )
-        home_defence = self._relative_rate(
-            home.home.goals_against_per_match(), league_away_goals
-        )
-
+        explanation = self.explain(home_team, away_team)
         return ExpectedGoals(
             # Standard independent Poisson baseline: league rate adjusted by the
             # attacking team's strength and the opponent's defensive weakness.
-            home=league_home_goals * home_attack * away_defence,
-            away=league_away_goals * away_attack * home_defence,
+            home=(
+                explanation.league_home_goals
+                * explanation.home_team_home_strength.attack_multiplier
+                * explanation.away_team_away_strength.defence_multiplier
+            ),
+            away=(
+                explanation.league_away_goals
+                * explanation.away_team_away_strength.attack_multiplier
+                * explanation.home_team_home_strength.defence_multiplier
+            ),
+        )
+
+    def explain(self, home_team: str, away_team: str) -> MatchupExplanation:
+        """Return the transparent rate and multiplier breakdown for a matchup."""
+        self._validate_teams(home_team, away_team)
+
+        league_home_goals = self._league_home_goals
+        league_away_goals = self._league_away_goals
+        home_rec = self._team_record(home_team).home
+        away_rec = self._team_record(away_team).away
+
+        home_gf_rate = home_rec.goals_for_per_match()
+        home_ga_rate = home_rec.goals_against_per_match()
+        away_gf_rate = away_rec.goals_for_per_match()
+        away_ga_rate = away_rec.goals_against_per_match()
+
+        home_attack = self._relative_rate(home_gf_rate, league_home_goals)
+        home_defence = self._relative_rate(home_ga_rate, league_away_goals)
+        away_attack = self._relative_rate(away_gf_rate, league_away_goals)
+        away_defence = self._relative_rate(away_ga_rate, league_home_goals)
+
+        return MatchupExplanation(
+            total_league_matches=self._matches,
+            league_home_goals=league_home_goals,
+            league_away_goals=league_away_goals,
+            used_initial_league_rates=(self._matches == 0),
+            home_team_home_strength=TeamVenueStrength(
+                matches_played=home_rec.matches,
+                goals_for=home_rec.goals_for,
+                goals_against=home_rec.goals_against,
+                goals_for_per_match=home_gf_rate,
+                goals_against_per_match=home_ga_rate,
+                attack_multiplier=home_attack,
+                defence_multiplier=home_defence,
+                used_neutral_fallback=(home_rec.matches == 0),
+            ),
+            away_team_away_strength=TeamVenueStrength(
+                matches_played=away_rec.matches,
+                goals_for=away_rec.goals_for,
+                goals_against=away_rec.goals_against,
+                goals_for_per_match=away_gf_rate,
+                goals_against_per_match=away_ga_rate,
+                attack_multiplier=away_attack,
+                defence_multiplier=away_defence,
+                used_neutral_fallback=(away_rec.matches == 0),
+            ),
         )
 
     def record_result(

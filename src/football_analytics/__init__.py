@@ -9,12 +9,16 @@ from pathlib import Path
 from football_analytics.analytics import predict_fixture
 from football_analytics.db.repository import FootballRepository
 from football_analytics.db.session import SessionLocal
+from football_analytics.ingestion.api_football import (
+    ApiFootballClient,
+    sync_competition_season,
+)
 from football_analytics.ingestion.bulk import bulk_ingest
 from football_analytics.ingestion.pipeline import ingest
 
 
 def main() -> None:
-    """Run the ingestion or fixture-prediction command."""
+    """Run the ingestion, live sync, API server, or fixture-prediction command."""
     parser = argparse.ArgumentParser(prog="football-analytics")
     subcommands = parser.add_subparsers(dest="command", required=True)
 
@@ -30,6 +34,17 @@ def main() -> None:
     bulk_ingest_parser.add_argument("--competition-name", required=True)
     bulk_ingest_parser.add_argument("--competition-code", required=True)
 
+    sync_parser = subcommands.add_parser(
+        "sync-fixtures",
+        help="Sync completed matches and scheduled fixtures from api-football.com",
+    )
+    sync_parser.add_argument("--competition-code", required=True)
+    sync_parser.add_argument("--season", required=True)
+    sync_parser.add_argument("--competition-name", default=None)
+    sync_parser.add_argument("--league-id", type=int, default=None)
+    sync_parser.add_argument("--include-odds", action="store_true")
+    sync_parser.add_argument("--include-stats", action="store_true")
+
     predict_parser = subcommands.add_parser(
         "predict",
         help="Predict an upcoming fixture",
@@ -41,10 +56,15 @@ def main() -> None:
 
     serve_parser = subcommands.add_parser(
         "serve",
-        help="Run the local prediction dashboard",
+        help="Run the Football Engine Lab FastAPI server (/api/v1)",
     )
     serve_parser.add_argument("--host", default="127.0.0.1")
     serve_parser.add_argument("--port", type=int, default=8000)
+    serve_parser.add_argument(
+        "--reload",
+        action="store_true",
+        help="Enable auto-reload for local development",
+    )
 
     arguments = parser.parse_args()
     if arguments.command == "ingest":
@@ -95,14 +115,47 @@ def main() -> None:
         )
         return
 
+    if arguments.command == "sync-fixtures":
+        client = ApiFootballClient()
+        with SessionLocal() as session:
+            summary = sync_competition_season(
+                session,
+                client,
+                competition_code=arguments.competition_code,
+                season_name=arguments.season,
+                competition_name=arguments.competition_name,
+                api_football_league_id=arguments.league_id,
+                include_odds=arguments.include_odds,
+                include_statistics_for_new=arguments.include_stats,
+            )
+            session.commit()
+        print(
+            json.dumps(
+                {
+                    "competition_code": summary.competition_code,
+                    "season_name": summary.season_name,
+                    "api_football_league_id": summary.api_football_league_id,
+                    "api_football_season_year": summary.api_football_season_year,
+                    "created_completed_matches": summary.created_completed_matches,
+                    "existing_completed_matches": summary.existing_completed_matches,
+                    "upserted_scheduled_fixtures": summary.upserted_scheduled_fixtures,
+                    "synced_odds_records": summary.synced_odds_records,
+                    "requests_remaining": summary.requests_remaining,
+                },
+                indent=2,
+            )
+        )
+        return
+
     if arguments.command == "serve":
         import uvicorn
 
         uvicorn.run(
-            "football_analytics.web.app:create_app",
+            "football_analytics.api.main:create_app",
             factory=True,
             host=arguments.host,
             port=arguments.port,
+            reload=arguments.reload,
         )
         return
 
